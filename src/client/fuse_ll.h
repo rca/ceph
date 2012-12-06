@@ -12,4 +12,10 @@
  * 
  */
 
-int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd_on_success);
+struct ceph_fuse_ll_handle;
+
+int ceph_fuse_ll_init(Client *c, int argc, const char *argv[], int fd_on_success, struct ceph_fuse_ll_handle **handle);
+
+int ceph_fuse_ll_main(struct ceph_fuse_ll_handle *handle);
+
+void ceph_fuse_ll_finalize(Client *c, struct ceph_fuse_ll_handle *handle);

@@ -558,9 +558,23 @@ const static struct fuse_lowlevel_ops ceph_ll_oper = {
  bmap: 0
 };
 
-int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
+
+struct ceph_fuse_ll_handle {
+  struct fuse_chan *ch;
+  struct fuse_session *se;
+  const char **newargv;
+  struct fuse_args args;
+  char *mountpoint;
+};
+
+int ceph_fuse_ll_init(Client *c, int argc, const char *argv[], int fd, struct ceph_fuse_ll_handle **handle)
 {
   //cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
+  struct ceph_fuse_ll_handle *h;
+  h = (struct ceph_fuse_ll_handle *)malloc(sizeof(*h));
+  if (!h) {
+    return -ENOMEM;
+  }
 
   fd_on_success = fd;
 
@@ -568,90 +582,92 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
 
   snap_stag_map[CEPH_NOSNAP] = 0;
   stag_snap_map[0] = CEPH_NOSNAP;
-  
+
   // set up fuse argc/argv
   int newargc = 0;
-  const char **newargv = (const char **) malloc((argc + 10) * sizeof(char *));
-  newargv[newargc++] = argv[0];
-  newargv[newargc++] = "-f";  // stay in foreground
+  h->newargv = (const char **) malloc((argc + 10) * sizeof(char *));
+  h->newargv[newargc++] = argv[0];
+  h->newargv[newargc++] = "-f";  // stay in foreground
 
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "allow_other";
+  h->newargv[newargc++] = "-o";
+  h->newargv[newargc++] = "allow_other";
 
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "default_permissions";
+  h->newargv[newargc++] = "-o";
+  h->newargv[newargc++] = "default_permissions";
 
   if (g_conf->fuse_big_writes) {
-    newargv[newargc++] = "-o";
-    newargv[newargc++] = "big_writes";
+    h->newargv[newargc++] = "-o";
+    h->newargv[newargc++] = "big_writes";
   }
 
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "atomic_o_trunc";
+  h->newargv[newargc++] = "-o";
+  h->newargv[newargc++] = "atomic_o_trunc";
 
   if (g_conf->fuse_debug)
-    newargv[newargc++] = "-d";
+    h->newargv[newargc++] = "-d";
 
   for (int argctr = 1; argctr < argc; argctr++)
-    newargv[newargc++] = argv[argctr];
+    h->newargv[newargc++] = argv[argctr];
 
   // go go gadget fuse
-  struct fuse_args args = FUSE_ARGS_INIT(newargc, (char**)newargv);
-  struct fuse_chan *ch = NULL;
-  struct fuse_session *se = NULL;
-  char *mountpoint = NULL;
+  h->args = FUSE_ARGS_INIT(newargc, (char**)h->newargv);
   int ret = 0;
-  
-  if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) == -1) {
+
+  if (fuse_parse_cmdline(&h->args, &h->mountpoint, NULL, NULL) == -1) {
     derr << "fuse_parse_cmdline failed." << dendl;
     ret = EINVAL;
     goto done;
   }
 
-  ch = fuse_mount(mountpoint, &args);
-  if (!ch) {
-    derr << "fuse_mount(mountpoint=" << mountpoint << ") failed." << dendl;
+  h->ch = fuse_mount(h->mountpoint, &h->args);
+  if (!h->ch) {
+    derr << "fuse_mount(mountpoint=" << h->mountpoint << ") failed." << dendl;
     ret = EIO;
     goto done;
   }
 
-  se = fuse_lowlevel_new(&args, &ceph_ll_oper, sizeof(ceph_ll_oper), NULL);
-  if (!se) {
+  h->se = fuse_lowlevel_new(&h->args, &ceph_ll_oper, sizeof(ceph_ll_oper), NULL);
+  if (!h->se) {
     derr << "fuse_lowlevel_new failed" << dendl;
     ret = EDOM;
     goto done;
   }
-    
+
   signal(SIGTERM, SIG_DFL);
   signal(SIGINT, SIG_DFL);
-  if (fuse_set_signal_handlers(se) == -1) {
+  if (fuse_set_signal_handlers(h->se) == -1) {
     derr << "fuse_set_signal_handlers failed" << dendl;
     ret = ENOSYS;
     goto done;
   }
 
-  fuse_session_add_chan(se, ch);
+  fuse_session_add_chan(h->se, h->ch);
 
-  client->ll_register_getgroups_cb(getgroups_cb, ch);
+  client->ll_register_getgroups_cb(getgroups_cb, h->ch);
 
   if (g_conf->fuse_use_invalidate_cb)
-    client->ll_register_ino_invalidate_cb(invalidate_cb, ch);
-
-  ret = fuse_session_loop(se);
-
-  client->ll_register_ino_invalidate_cb(NULL, NULL);
-
-  fuse_remove_signal_handlers(se);
-  fuse_session_remove_chan(ch);
+    client->ll_register_ino_invalidate_cb(invalidate_cb, h->ch);
 
 done:
-  if (se)
-    fuse_session_destroy(se);
-  if (ch)
-    fuse_unmount(mountpoint, ch);
-  fuse_opt_free_args(&args);
-  free(newargv);
-  //cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
+  *handle = h;
   return ret;
 }
 
+int ceph_fuse_ll_main(struct ceph_fuse_ll_handle *handle)
+{
+  return fuse_session_loop(handle->se);
+}
+
+void ceph_fuse_ll_finalize(Client *client, struct ceph_fuse_ll_handle *handle)
+{
+  client->ll_register_ino_invalidate_cb(NULL, NULL);
+
+  fuse_remove_signal_handlers(handle->se);
+  fuse_session_remove_chan(handle->ch);
+  fuse_session_destroy(handle->se);
+  fuse_unmount(handle->mountpoint, handle->ch);
+  //cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
+  fuse_opt_free_args(&handle->args);
+  free(handle->newargv);
+  free(handle);
+}

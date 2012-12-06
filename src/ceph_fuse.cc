@@ -152,13 +152,18 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_shutdown;
     }
     
+    struct ceph_fuse_ll_handle *handle;
+    ceph_fuse_ll_init(client, newargc, newargv, fd[1], &handle);
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
-    r = ceph_fuse_ll_main(client, newargc, newargv, fd[1]);
+    r = ceph_fuse_ll_main(handle);
     cerr << "ceph-fuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
     
     client->unmount();
     //cout << "unmounted" << std::endl;
-    
+
+    // do finalize after unmount
+    ceph_fuse_ll_finalize(client, handle);
+
   out_shutdown:
     client->shutdown();
   out_init_failed:
