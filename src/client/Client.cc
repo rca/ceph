@@ -6250,12 +6250,38 @@ bool Client::ll_forget(vinodeno_t vino, int num)
   return last;
 }
 
+
+inodeno_t Client::ll_get_ino(Inode *in)
+{
+  return in->ino;
+}
+
+snapid_t Client::ll_get_snapid(Inode *in)
+{
+  return in->snapid;
+}
+
+vinodeno_t Client::ll_get_vino(Inode *in)
+{
+  return vinodeno_t(in->ino, in->snapid);
+}
+
+Inode *Client::ll_lookup_ino(vinodeno_t vino)
+{
+  Mutex::Locker lock(client_lock);
+  hash_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
+  if (p == inode_map.end())
+    return NULL;
+  Inode *in = p->second;
+  _ll_get(in);
+  return in;
+}
+
 Inode *Client::_ll_get_inode(vinodeno_t vino)
 {
   assert(inode_map.count(vino));
   return inode_map[vino];
 }
-
 
 int Client::ll_getattr(vinodeno_t vino, struct stat *attr, int uid, int gid)
 {
@@ -7219,7 +7245,7 @@ int Client::ll_release(Fh *fh)
   return 0;
 }
 
-
+// --------------------------
 
 
 

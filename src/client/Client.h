@@ -706,6 +706,32 @@ public:
   void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
 
   void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
+
+  // low-level interface v2
+  inodeno_t ll_get_ino(Inode *in);
+  snapid_t ll_get_snapid(Inode *in);
+  vinodeno_t ll_get_vino(Inode *in);
+  Inode *ll_lookup_ino(vinodeno_t vino);
+  int ll_lookup(Inode *parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
+  bool ll_forget(Inode *in, int count);
+  int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
+  int ll_setattr(Inode *in, struct stat *st, int mask, int uid = -1, int gid = -1);
+  int ll_getxattr(Inode *in, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
+  int ll_setxattr(Inode *in, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
+  int ll_removexattr(Inode *in, const char *name, int uid=-1, int gid=-1);
+  int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
+  int ll_opendir(Inode *in, void **dirpp, int uid = -1, int gid = -1);
+  int ll_readlink(Inode *in, const char **value, int uid = -1, int gid = -1);
+  int ll_mknod(Inode *in, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_mkdir(Inode *in, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_symlink(Inode *in, const char *name, const char *value, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_unlink(Inode *in, const char *name, int uid = -1, int gid = -1);
+  int ll_rmdir(Inode *in, const char *name, int uid = -1, int gid = -1);
+  int ll_rename(Inode *parent, const char *name, Inode *newparent, const char *newname, int uid = -1, int gid = -1);
+  int ll_link(Inode *in, Inode *newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_open(Inode *in, int flags, Fh **fh, int uid = -1, int gid = -1);
+  int ll_create(Inode *parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
+  int ll_statfs(Inode *in, struct statvfs *stbuf);
 };
 
 #endif
