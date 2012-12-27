@@ -2458,6 +2458,64 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1file_1repli
 
 /*
  * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_file_pool_name
+ * Signature: (JI)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1file_1pool_1name
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint j_fd)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  jstring pool = NULL;
+  int ret, buflen;
+  char *buf;
+
+  CHECK_MOUNTED(cmount, NULL);
+
+  ldout(cct, 10) << "jni: get_file_pool_name: fd " << (int)j_fd << dendl;
+
+  /* guess a reasonable starting buffer size */
+  buflen = 128;
+  buf = new (std::nothrow) char[buflen];
+  if (!buf)
+    goto out;
+
+  while (1) {
+    ldout(cct, 10) << "jni: get_file_pool_name: fd " << (int)j_fd << " buflen " << buflen << dendl;
+    memset(buf, 0, buflen);
+    ret = ceph_get_file_pool_name(cmount, (int)j_fd, buf, buflen);
+    if (ret == -ERANGE)
+      buflen = 0; /* guess size */
+    else if (ret < 0)
+      break; /* error */
+    else if (buflen == 0) {
+      delete [] buf; /* reallocate */
+      buflen = ret;
+      buf = new (std::nothrow) char[buflen];
+      if (!buf)
+        goto out;
+    } else
+      break; /* success */
+  }
+
+  ldout(cct, 10) << "jni: get_file_pool_name: ret " << ret << dendl;
+
+  if (ret < 0)
+    handle_error(env, ret);
+  else
+    pool = env->NewStringUTF(buf);
+
+out:
+  if (buf)
+    delete [] buf;
+  else
+    cephThrowOutOfMemory(env, "head allocation failed");
+
+  return pool;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_localize_reads
  * Signature: (JZ)I
  */
