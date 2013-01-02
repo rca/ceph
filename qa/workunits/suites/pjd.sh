@@ -2,7 +2,7 @@
 
 set -e
 
-wget http://ceph.com/qa/pjd.tgz
+wget http://ceph.com/qa/pjd-fstest-20090130-RC-open24.tgz
 tar zxvf pjd*.tgz
 cd pjd*
 make
